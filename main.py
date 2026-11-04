@@ -1,5 +1,6 @@
 import os
 import logging
+import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, CallbackQueryHandler
 from threading import Thread
@@ -34,20 +35,25 @@ def keep_alive():
     t = Thread(target=run_web)
     t.start()
 
-# AI se dynamic question generate karne ka function
+# AI se 100% selected subject ke anusaar question generate karne ka function
 def generate_ai_question(subject, lang):
     if not ai_model:
         return {
-            "question": "Which act introduced Dyarchy in India?",
-            "options": {"A": "1909 Act", "B": "1919 Act", "C": "1935 Act", "D": "1892 Act"},
-            "correct": "B",
-            "explanation": "Dyarchy in provinces was introduced by the Montague-Chelmsford Reforms (1919)."
+            "question": "Sample Question",
+            "options": {"A": "Opt A", "B": "Opt B", "C": "Opt C", "D": "Opt D"},
+            "correct": "A",
+            "explanation": "Sample explanation."
         }
     
+    # Unique seed taaki AI har baar bilkul naya question de
+    random_seed = random.randint(10000, 99999)
+    
     prompt = f"""
-    You are an expert SSC exam question creator. Generate a unique, high-quality Previous Year style Multiple Choice Question (MCQ) for the subject '{subject}' in '{lang}' language.
-    The output must strictly follow this format using separator:
-    QUESTION: [Write the question here]
+    You are an expert SSC exam question creator. Generate ONE unique, brand-new Previous Year style Multiple Choice Question (MCQ) strictly and exclusively for the subject: '{subject}'. 
+    Language requirement: '{lang}'. (Random Seed: {random_seed}).
+    Do NOT mix subjects. If the subject is History, question must be from History. If Polity, from Polity.
+    The output must strictly follow this exact format with uppercase headers:
+    QUESTION: [Write the question text here]
     OPTION_A: [Text for option A]
     OPTION_B: [Text for option B]
     OPTION_C: [Text for option C]
@@ -61,7 +67,7 @@ def generate_ai_question(subject, lang):
         text = response.text
         
         lines = text.strip().split('\n')
-        q_data = {"question": "", "options": {}, "correct": "B", "explanation": ""}
+        q_data = {"question": "", "options": {}, "correct": "A", "explanation": ""}
         
         for line in lines:
             if line.startswith("QUESTION:"):
@@ -79,18 +85,42 @@ def generate_ai_question(subject, lang):
             elif line.startswith("EXPLANATION:"):
                 q_data["explanation"] = line.replace("EXPLANATION:", "").strip()
                 
-        if not q_data["question"]:
-            raise Exception("Parsing failed")
+        if not q_data["question"] or not q_data["options"].get("A"):
+            raise Exception("AI Parsing incomplete")
             
         return q_data
     except Exception as e:
         print(f"AI Error: {e}")
-        return {
-            "question": "भारतीय संविधान का कौन सा अनुच्छेद मूल अधिकार से संबंधित है? / Which article relates to Fundamental Rights?",
-            "options": {"A": "Article 12-35", "B": "Article 36-51", "C": "Article 52-61", "D": "Article 1-4"},
-            "correct": "A",
-            "explanation": "Fundamental Rights are enshrined in Part III from Article 12 to 35 of the Indian Constitution."
-        }
+        # Subject-wise smart fallback
+        sub_lower = subject.lower()
+        if "history" in sub_lower:
+            return {
+                "question": "Who was the founder of the Maurya Empire?",
+                "options": {"A": "Ashoka", "B": "Chandragupta Maurya", "C": "Bindusara", "D": "Samudragupta"},
+                "correct": "B",
+                "explanation": "Chandragupta Maurya founded the Maurya Empire in 322 BCE."
+            }
+        elif "polity" in sub_lower:
+            return {
+                "question": "Which article of the Indian Constitution deals with the Right to Equality?",
+                "options": {"A": "Article 14-18", "B": "Article 19-22", "C": "Article 23-24", "D": "Article 25-28"},
+                "correct": "A",
+                "explanation": "Articles 14 to 18 guarantee the Right to Equality."
+            }
+        elif "current" in sub_lower:
+            return {
+                "question": "Recent important national event related question placeholder.",
+                "options": {"A": "Option 1", "B": "Option 2", "C": "Option 3", "D": "Option 4"},
+                "correct": "A",
+                "explanation": "Explanation for current affairs question."
+            }
+        else:
+            return {
+                "question": "Which is the highest civilian award in India?",
+                "options": {"A": "Padma Vibhushan", "B": "Bharat Ratna", "C": "Padma Bhushan", "D": "Ashok Chakra"},
+                "correct": "B",
+                "explanation": "Bharat Ratna is the highest civilian award of the Republic of India."
+            }
 
 # /start command: Language Selection Menu
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -102,9 +132,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     welcome_text = (
-        f"👋 नमस्ते {user_name} जी!\n\n"
-        "🎯 SSC & Government Exams AI PYQ Bot में आपका स्वागत है।\n"
-        "कृपया अपनी भाषा (Preferred Language) चुनें:"
+        f"👋 Namaste {user_name} ji!\n\n"
+        "🎯 SSC & Government Exams AI PYQ Bot me aapka swagat hai.\n"
+        "Kripya apni bhasha (Preferred Language) chunein:"
     )
     
     await update.message.reply_text(welcome_text, reply_markup=reply_markup)
@@ -125,34 +155,36 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.delete()
 
         if lang == "Hindi":
-            sub_text = "📚 विषय चयन (Subject Selection):\n\nAI प्रैक्टिस के लिए नीचे दिए गए विषयों में से चुनें:"
+            sub_text = "📚 **Vishay Chayan (Subject Selection):**\n\nAI practice ke liye niche diye gaye vishayon me se chunein:"
             buttons = [
-                [InlineKeyboardButton("📖 इतिहास (History)", callback_data="sub_History")],
-                [InlineKeyboardButton("⚖️ भारतीय राजव्यवस्था (Indian Polity)", callback_data="sub_Polity")],
-                [InlineKeyboardButton("🔥 करेंट अफेयर्स (Current Affairs)", callback_data="sub_Current_Affairs")],
-                [InlineKeyboardButton("💡 स्टैटिक जीके (Static GK)", callback_data="sub_Static_GK")]
+                [InlineKeyboardButton("📖 Itihas (History)", callback_data="sub_History")],
+                [InlineKeyboardButton("⚖️ Bharatiya Rajvyavastha (Indian Polity)", callback_data="sub_Indian Polity")],
+                [InlineKeyboardButton("🔥 Current Affairs", callback_data="sub_Current Affairs")],
+                [InlineKeyboardButton("💡 Static GK", callback_data="sub_Static GK")]
             ]
         else:
-            sub_text = "📚 Subject Selection:\n\nPlease choose a subject for AI practice:"
+            sub_text = "📚 **Subject Selection:**\n\nPlease choose a subject for AI practice:"
             buttons = [
                 [InlineKeyboardButton("📖 History", callback_data="sub_History")],
-                [InlineKeyboardButton("⚖️ Indian Polity & Constitution", callback_data="sub_Polity")],
-                [InlineKeyboardButton("🔥 Current Affairs", callback_data="sub_Current_Affairs")],
-                [InlineKeyboardButton("💡 Static GK", callback_data="sub_Static_GK")]
+                [InlineKeyboardButton("⚖️ Indian Polity", callback_data="sub_Indian Polity")],
+                [InlineKeyboardButton("🔥 Current Affairs", callback_data="sub_Current Affairs")],
+                [InlineKeyboardButton("💡 Static GK", callback_data="sub_Static GK")]
             ]
 
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.reply_text(sub_text, reply_markup=reply_markup)
+        await query.message.reply_text(sub_text, parse_mode='Markdown', reply_markup=reply_markup)
 
     # 2. Subject Selected or Next Question Clicked -> Generate AI Question
     elif data.startswith("sub_") or data == "next_q":
         if data.startswith("sub_"):
-            subject = data.replace("sub_", "").replace("_", " ")
+            subject = data.replace("sub_", "")
             user_data['subject'] = subject
-            await query.message.delete()
+            try:
+                await query.message.delete()
+            except:
+                pass
         else:
-            subject = user_data.get('subject', 'Indian Polity')
-            # Purane question ke message ko delete kar dete hain ya clean rakhte hain
+            subject = user_data.get('subject', 'History')
             try:
                 await query.message.delete()
             except:
@@ -160,17 +192,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         lang = user_data.get('language', 'English')
         
-        # Loading message
-        loading_text = "🤖 AI is generating fresh question..." if lang == "English" else "🤖 AI नया प्रश्न तैयार कर रहा है..."
+        loading_text = f"🤖 AI is generating a fresh {subject} question..." if lang == "English" else f"🤖 AI {subject} ka naya prashn taiyar kar raha hai..."
         loading_msg = await query.message.reply_text(loading_text)
 
-        # AI question generation
+        # AI question generation with strict subject passing
         q_data = generate_ai_question(subject, lang)
         user_data['current_question'] = q_data
 
-        # Clean question layout (Inspired by clean test format)
+        # Clean question layout
         question_box = (
-            f"🎯 **{subject}**\n\n"
+            f"🎯 **Subject: {subject}**\n\n"
             f"❓ **{q_data['question']}**\n\n"
             f"A) {q_data['options'].get('A', '')}\n"
             f"B) {q_data['options'].get('B', '')}\n"
@@ -207,16 +238,18 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
              InlineKeyboardButton(f"{'✅' if 'D'==correct_option else ('❌' if 'D'==selected_option else '🔒')} D", callback_data="noop")]
         ]
 
-        # Update current question message to locked state
-        await query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(locked_keyboard))
+        try:
+            await query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(locked_keyboard))
+        except:
+            pass
 
         # Separate Explanation Message in selected language with Next Button
         if lang == "Hindi":
             exp_text = (
-                f"✍️ **आपका उत्तर:** {selected_option} | 🟢 **सही उत्तर:** {correct_option}\n\n"
-                f"💡 **विस्तृत स्पष्टीकरण (Detailed Explanation):**\n{explanation}"
+                f"✍️ **Aapka Uttar:** {selected_option} | 🟢 **Sahi Uttar:** {correct_option}\n\n"
+                f"💡 **Vistrit Spashtikaran (Detailed Explanation):**\n{explanation}"
             )
-            next_btn_text = "➡️ अगला प्रश्न (Next Question)"
+            next_btn_text = "➡️ Agla Prashn (Next Question)"
         else:
             exp_text = (
                 f"✍️ **Your Answer:** {selected_option} | 🟢 **Correct Answer:** {correct_option}\n\n"
@@ -247,6 +280,5 @@ def main():
     print("AI Bot shuru ho gaya hai...")
     application.run_polling()
 
-finish = __name__ == '__main__'
 if __name__ == '__main__':
     main()
