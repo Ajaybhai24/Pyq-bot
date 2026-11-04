@@ -1,6 +1,5 @@
 import os
 import logging
-import random
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler, CallbackQueryHandler
 from threading import Thread
@@ -38,7 +37,6 @@ def keep_alive():
 # AI se dynamic question generate karne ka function
 def generate_ai_question(subject, lang):
     if not ai_model:
-        # Fallback agar API key set na ho
         return {
             "question": "Which act introduced Dyarchy in India?",
             "options": {"A": "1909 Act", "B": "1919 Act", "C": "1935 Act", "D": "1892 Act"},
@@ -48,7 +46,7 @@ def generate_ai_question(subject, lang):
     
     prompt = f"""
     You are an expert SSC exam question creator. Generate a unique, high-quality Previous Year style Multiple Choice Question (MCQ) for the subject '{subject}' in '{lang}' language.
-    The output must strictly follow this format using separator '###':
+    The output must strictly follow this format using separator:
     QUESTION: [Write the question here]
     OPTION_A: [Text for option A]
     OPTION_B: [Text for option B]
@@ -62,7 +60,6 @@ def generate_ai_question(subject, lang):
         response = ai_model.generate_content(prompt)
         text = response.text
         
-        # Parsing AI response safely
         lines = text.strip().split('\n')
         q_data = {"question": "", "options": {}, "correct": "B", "explanation": ""}
         
@@ -88,7 +85,6 @@ def generate_ai_question(subject, lang):
         return q_data
     except Exception as e:
         print(f"AI Error: {e}")
-        # Default fallback
         return {
             "question": "भारतीय संविधान का कौन सा अनुच्छेद मूल अधिकार से संबंधित है? / Which article relates to Fundamental Rights?",
             "options": {"A": "Article 12-35", "B": "Article 36-51", "C": "Article 52-61", "D": "Article 1-4"},
@@ -106,13 +102,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     welcome_text = (
-        f"👋 **नमस्ते {user_name} जी!**\n\n"
-        "🎯 **SSC & Government Exams AI PYQ Bot** में आपका स्वागत है।\n"
-        "यह बॉट AI एनालिसिस के आधार पर हर बार आपको नए और बेहतरीन सवाल देगा।\n\n"
+        f"👋 नमस्ते {user_name} जी!\n\n"
+        "🎯 SSC & Government Exams AI PYQ Bot में आपका स्वागत है।\n"
         "कृपया अपनी भाषा (Preferred Language) चुनें:"
     )
     
-    await update.message.reply_text(welcome_text, parse_mode='Markdown', reply_markup=reply_markup)
+    await update.message.reply_text(welcome_text, reply_markup=reply_markup)
 
 # Button Handler
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -130,7 +125,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.delete()
 
         if lang == "Hindi":
-            sub_text = "📚 **विषय चयन (Subject Selection):**\n\nAI प्रैक्टिस के लिए नीचे दिए गए विषयों में से चुनें:"
+            sub_text = "📚 विषय चयन (Subject Selection):\n\nAI प्रैक्टिस के लिए नीचे दिए गए विषयों में से चुनें:"
             buttons = [
                 [InlineKeyboardButton("📖 इतिहास (History)", callback_data="sub_History")],
                 [InlineKeyboardButton("⚖️ भारतीय राजव्यवस्था (Indian Polity)", callback_data="sub_Polity")],
@@ -138,7 +133,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [InlineKeyboardButton("💡 स्टैटिक जीके (Static GK)", callback_data="sub_Static_GK")]
             ]
         else:
-            sub_text = "📚 **Subject Selection:**\n\nPlease choose a subject for AI practice:"
+            sub_text = "📚 Subject Selection:\n\nPlease choose a subject for AI practice:"
             buttons = [
                 [InlineKeyboardButton("📖 History", callback_data="sub_History")],
                 [InlineKeyboardButton("⚖️ Indian Polity & Constitution", callback_data="sub_Polity")],
@@ -147,32 +142,40 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
 
         reply_markup = InlineKeyboardMarkup(buttons)
-        await query.message.reply_text(sub_text, parse_mode='Markdown', reply_markup=reply_markup)
+        await query.message.reply_text(sub_text, reply_markup=reply_markup)
 
-    # 2. Subject Selected -> Generate AI Question
-    elif data.startswith("sub_"):
-        subject = data.replace("sub_", "").replace("_", " ")
-        user_data['subject'] = subject
+    # 2. Subject Selected or Next Question Clicked -> Generate AI Question
+    elif data.startswith("sub_") or data == "next_q":
+        if data.startswith("sub_"):
+            subject = data.replace("sub_", "").replace("_", " ")
+            user_data['subject'] = subject
+            await query.message.delete()
+        else:
+            subject = user_data.get('subject', 'Indian Polity')
+            # Purane question ke message ko delete kar dete hain ya clean rakhte hain
+            try:
+                await query.message.delete()
+            except:
+                pass
 
-        await query.message.delete()
         lang = user_data.get('language', 'English')
         
         # Loading message
-        loading_msg = await query.message.reply_text("🤖 AI is analyzing previous year trends and generating a fresh question for you...")
+        loading_text = "🤖 AI is generating fresh question..." if lang == "English" else "🤖 AI नया प्रश्न तैयार कर रहा है..."
+        loading_msg = await query.message.reply_text(loading_text)
 
-        # AI se question generate karwana
+        # AI question generation
         q_data = generate_ai_question(subject, lang)
-        user_data['current_question'] = q_data  # Save in session for checking answer
+        user_data['current_question'] = q_data
 
-        # Format question box
+        # Clean question layout (Inspired by clean test format)
         question_box = (
-            f"🎯 **Subject:** {subject}\n"
-            f"📌 **AI Generated PYQ Question**\n\n"
-            f"❓ {q_data['question']}\n\n"
-            f"🔹 **A)** {q_data['options'].get('A', '')}\n"
-            f"🔹 **B)** {q_data['options'].get('B', '')}\n"
-            f"🔹 **C)** {q_data['options'].get('C', '')}\n"
-            f"🔹 **D)** {q_data['options'].get('D', '')}"
+            f"🎯 **{subject}**\n\n"
+            f"❓ **{q_data['question']}**\n\n"
+            f"A) {q_data['options'].get('A', '')}\n"
+            f"B) {q_data['options'].get('B', '')}\n"
+            f"C) {q_data['options'].get('C', '')}\n"
+            f"D) {q_data['options'].get('D', '')}"
         )
         
         q_keyboard = [
@@ -183,7 +186,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await loading_msg.delete()
         await query.message.reply_text(question_box, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(q_keyboard))
 
-    # 3. Answer Clicked -> Detailed Explanation & Lock Buttons
+    # 3. Answer Clicked -> Lock options and send separate explanation message
     elif data.startswith("ans_"):
         selected_option = data.replace("ans_", "")
         q_data = user_data.get('current_question')
@@ -194,33 +197,36 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         correct_option = q_data['correct']
         explanation = q_data['explanation']
+        lang = user_data.get('language', 'English')
 
-        if selected_option == correct_option:
-            feedback = (
-                f"{query.message.text}\n\n"
-                f"━━━━━━━━━━━━━━━━━━━\n"
-                f"🎉 **बधाई हो! आपका जवाब बिल्कुल सही है!** 🥳✨\n"
-                f"✅ **चुना गया उत्तर:** {selected_option}\n\n"
-                f"💡 **विस्तृत स्पष्टीकरण (Detailed Explanation):**\n{explanation}"
-            )
-        else:
-            feedback = (
-                f"{query.message.text}\n\n"
-                f"━━━━━━━━━━━━━━━━━━━\n"
-                f"❌ **अरे! यह जवाब गलत है।**\n"
-                f"🔴 **आपका उत्तर:** {selected_option} | 🟢 **सही उत्तर:** {correct_option}\n\n"
-                f"💡 **विस्तृत स्पष्टीकरण (Detailed Explanation):**\n{explanation}"
-            )
-
-        # Lock buttons layout
+        # Lock buttons layout with correct/incorrect markers
         locked_keyboard = [
-            [InlineKeyboardButton(f"{'✅' if 'A'==correct_option else '❌'} A", callback_data="noop"), 
-             InlineKeyboardButton(f"{'✅' if 'B'==correct_option else '❌'} B", callback_data="noop")],
-            [InlineKeyboardButton(f"{'✅' if 'C'==correct_option else '❌'} C", callback_data="noop"), 
-             InlineKeyboardButton(f"{'✅' if 'D'==correct_option else '❌'} D", callback_data="noop")]
+            [InlineKeyboardButton(f"{'✅' if 'A'==correct_option else ('❌' if 'A'==selected_option else '🔒')} A", callback_data="noop"), 
+             InlineKeyboardButton(f"{'✅' if 'B'==correct_option else ('❌' if 'B'==selected_option else '🔒')} B", callback_data="noop")],
+            [InlineKeyboardButton(f"{'✅' if 'C'==correct_option else ('❌' if 'C'==selected_option else '🔒')} C", callback_data="noop"), 
+             InlineKeyboardButton(f"{'✅' if 'D'==correct_option else ('❌' if 'D'==selected_option else '🔒')} D", callback_data="noop")]
         ]
 
-        await query.message.edit_text(feedback, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(locked_keyboard))
+        # Update current question message to locked state
+        await query.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(locked_keyboard))
+
+        # Separate Explanation Message in selected language with Next Button
+        if lang == "Hindi":
+            exp_text = (
+                f"✍️ **आपका उत्तर:** {selected_option} | 🟢 **सही उत्तर:** {correct_option}\n\n"
+                f"💡 **विस्तृत स्पष्टीकरण (Detailed Explanation):**\n{explanation}"
+            )
+            next_btn_text = "➡️ अगला प्रश्न (Next Question)"
+        else:
+            exp_text = (
+                f"✍️ **Your Answer:** {selected_option} | 🟢 **Correct Answer:** {correct_option}\n\n"
+                f"💡 **Detailed Explanation:**\n{explanation}"
+            )
+            next_btn_text = "➡️ Next Question"
+
+        next_keyboard = [[InlineKeyboardButton(next_btn_text, callback_data="next_q")]]
+        
+        await query.message.reply_text(exp_text, parse_mode='Markdown', reply_markup=InlineKeyboardMarkup(next_keyboard))
 
     elif data == "noop":
         await query.answer("Aap pehle hi jawab de chuke hain!", show_alert=True)
@@ -241,5 +247,6 @@ def main():
     print("AI Bot shuru ho gaya hai...")
     application.run_polling()
 
+finish = __name__ == '__main__'
 if __name__ == '__main__':
     main()
