@@ -1,14 +1,15 @@
+import os
 import logging
 from telegram import Update
 from telegram.ext import ApplicationBuilder, ContextTypes, CommandHandler
 
-# लॉगिंग सेट अप करते हैं ताकि कोई एरर आए तो पता चल सके
+# लॉगिंग सेट अप करते हैं
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 
-# जब यूजर /start लिखेगा, तब यह फंक्शन चलेगा
+# जब यूजर /start लिखेगा
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_name = update.effective_user.first_name
     await update.message.reply_text(
@@ -16,16 +17,22 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "जल्द ही यहाँ आपको Subject और Topic चुनने का विकल्प मिलेगा।"
     )
 
-if __name__ == '__main__':
-    # यहाँ अपना BotFather वाला API Token डालना है
-    TOKEN = "7280621712:AAGTzFS04PDZVHNTBL5_jqhPfmMiZTA-qCk"
+def main():
+    # Render के Environment Variable से टोकन को सुरक्षित तरीके से उठाना
+    TOKEN = os.environ.get("TOKEN")
+    
+    if not TOKEN:
+        print("Error: TOKEN environment variable not found!")
+        return
 
     application = ApplicationBuilder().token(TOKEN).build()
 
-    # /start कमांड को जोड़ने के लिए
-    start_handler = CommandHandler('start', start)
-    application.add_handler(start_handler)
+    # /start कमांड जोड़ना
+    application.add_handler(CommandHandler("start", start))
 
     print("बॉट शुरू हो गया है...")
-    # बॉट को लगातार चालू रखने के लिए
+    # बॉट को चलाना
     application.run_polling()
+
+if __name__ == '__main__':
+    main()
